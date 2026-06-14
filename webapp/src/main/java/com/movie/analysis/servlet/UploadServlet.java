@@ -205,13 +205,15 @@ public class UploadServlet extends HttpServlet {
     private String triggerSparkAnalysis(int dsId, List<File> files) {
         new Thread(() -> {
             try {
-                // Per-dataset subdirectory to isolate data
                 String dsDir = "~/movie_bigdata_analysis/data/custom/ds" + dsId;
                 execNoWait("ssh", "my-hadoop", "rm -rf " + dsDir + " && mkdir -p " + dsDir);
                 for (File f : files) {
-                    execNoWait("scp", f.getAbsolutePath(), "my-hadoop:" + dsDir + "/");
+                    // Clean duplicate headers before SCP
+                    File clean = cleanCsvFile(f);
+                    execNoWait("scp", clean.getAbsolutePath(), "my-hadoop:" + dsDir + "/");
+                    clean.delete(); // Clean temp file after SCP
                 }
-                // Clean up temp files AFTER SCP completes
+                // Clean up original temp files AFTER SCP completes
                 for (File f : files) f.delete();
 
                 execNoWait("ssh", "my-hadoop",
@@ -224,6 +226,58 @@ public class UploadServlet extends HttpServlet {
             }
         }).start();
         return "Spark analyzing...";
+    }
+
+    /** Remove duplicate header rows from CSV before sending to Spark */
+    private File cleanCsvFile(File file) throws Exception {
+        File out = File.createTempFile("clean_", ".csv");
+        try (BufferedReader br = new BufferedReader(new java.io.InputStreamReader(
+                new java.io.FileInputStream(file), "UTF-8"));
+             java.io.PrintWriter pw = new java.io.PrintWriter(
+                new java.io.OutputStreamWriter(new java.io.FileOutputStream(out), "UTF-8"))) {
+            String header = br.readLine();
+            if (header == null) { out.delete(); return file; }
+            pw.println(header); // Write original header
+
+            // Detect separator from header
+            String sep = ",";
+            if (header.contains("::")) sep = "::";
+            else if (header.contains("\t")) sep = "\t";
+
+            // Check if header is valid; if not, treat first line as data
+            boolean hasHeader = false;
+            for (String h : header.split(sep, -1)) {
+                h = h.trim().toLowerCase().replaceAll("[\"'`]", "");
+                if (h.matches(".*(id|rating|score|title|genre|user|movie|gender|age).*")
+                    && !h.matches("\\d+")) {
+                    hasHeader = true; break;
+                }
+            }
+
+            String line;
+            int skipped = 0;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty()) continue;
+                // Skip lines that look like repeated headers
+                if (hasHeader) {
+                    String[] fields = line.split(sep, -1);
+                    boolean looksLikeHeader = false;
+                    for (String f : fields) {
+                        f = f.trim().toLowerCase().replaceAll("[\"'`]", "");
+                        if (f.equals("user_id") || f.equals("userid") || f.equals("movie_id") ||
+                            f.equals("movieid") || f.equals("rating") || f.equals("score") ||
+                            f.equals("title") || f.equals("user_id")) {
+                            looksLikeHeader = true; break;
+                        }
+                    }
+                    if (looksLikeHeader && fields.length >= 2) { skipped++; continue; }
+                }
+                pw.println(line);
+            }
+            if (skipped > 0) System.err.println("[Upload] Cleaned " + skipped + " duplicate header rows");
+        }
+        return out;
     }
 
     /** 使用ProcessBuilder执行命令，避免Windows cmd.exe的引号问题 */

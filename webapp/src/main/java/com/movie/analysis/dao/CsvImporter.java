@@ -39,19 +39,30 @@ public class CsvImporter {
         result.put("movies", 0);
         result.put("ratings", 0);
         result.put("users", 0);
+        int totalSkipped = 0;
 
         // 确保表结构存在
         ensureTablesExist();
 
         for (File file : files) {
+            if (file.length() == 0) {
+                System.err.println("[CsvImporter] Warning: skipping empty file: " + file.getName());
+                continue;
+            }
             List<Map<String, String>> rows = parseFile(file);
-            if (rows.isEmpty()) continue;
+            if (rows.isEmpty()) {
+                System.err.println("[CsvImporter] Warning: no valid data in: " + file.getName());
+                continue;
+            }
 
             String tableType = detectTableType(rows.get(0).keySet());
-            int count = insertRows(tableType, rows);
-            result.put(tableType, result.get(tableType) + count);
+            int[] counts = insertRows(tableType, rows);
+            result.put(tableType, result.get(tableType) + counts[0]);
+            totalSkipped += counts[1];
         }
-
+        if (totalSkipped > 0) {
+            System.err.println("[CsvImporter] Total skipped rows: " + totalSkipped);
+        }
         return result;
     }
 
@@ -72,9 +83,21 @@ public class CsvImporter {
 
         if (lines.isEmpty()) return rows;
 
-        // 检测分隔符
+        // 预检：第一行必须包含可识别的列名或分隔符
         String firstLine = lines.get(0);
         String sep = detectSeparator(firstLine);
+
+        // If no recognizable separator (comma, tab, ::) and no known header words, reject
+        if (!firstLine.contains(",") && !firstLine.contains("\t") && !firstLine.contains("::")) {
+            System.err.println("[CsvImporter] Rejected: no valid delimiter in file: " + file.getName());
+            return rows;
+        }
+
+        // If first line has none of the typical column names, it's probably not a CSV header
+        if (!looksLikeDataFile(firstLine, sep)) {
+            System.err.println("[CsvImporter] Rejected: no recognizable columns in: " + file.getName());
+            return rows;
+        }
 
         // 解析表头
         String[] headers = firstLine.split(sep, -1);
@@ -90,10 +113,15 @@ public class CsvImporter {
             for (int i = 0; i < headers.length; i++) cleanHeaders.add("_c" + i);
         }
 
-        // 解析数据行
+        // 解析数据行，跳过重复表头
         for (int i = dataStart; i < lines.size(); i++) {
             String[] fields = lines.get(i).split(sep, -1);
             if (fields.length < 2) continue;
+            // Skip rows that look like repeated headers
+            if (hasHeader && isHeaderRow(fields)) {
+                System.err.println("[CsvImporter] Skipping repeated header at line " + (i+1));
+                continue;
+            }
 
             Map<String, String> row = new LinkedHashMap<>();
             for (int j = 0; j < Math.min(fields.length, cleanHeaders.size()); j++) {
@@ -103,6 +131,26 @@ public class CsvImporter {
         }
 
         return rows;
+    }
+
+    /** Check if first line looks like a valid data file header */
+    private boolean looksLikeDataFile(String line, String sep) {
+        String[] fields = line.split(sep, -1);
+        if (fields.length < 2) return false;
+        // Must have at least one recognizable column name or numeric-looking ID column
+        for (String f : fields) {
+            f = f.trim().toLowerCase().replaceAll("[\"'`]", "");
+            if (f.equals("user_id") || f.equals("userid") || f.equals("user") ||
+                f.equals("movie_id") || f.equals("movieid") || f.equals("movie") ||
+                f.equals("rating") || f.equals("score") || f.equals("rate") ||
+                f.equals("title") || f.equals("genres") || f.equals("genre") ||
+                f.equals("gender") || f.equals("age") || f.equals("occupation") ||
+                f.matches(".*(id|rating|score|title|genre|user|movie).*")) {
+                return true;
+            }
+        }
+        // Also accept if first data row (line 2) looks numeric (headerless CSV)
+        return false;
     }
 
     /** 检测分隔符 */
@@ -193,20 +241,20 @@ public class CsvImporter {
         }
     }
 
-    /** 批量插入数据 */
-    private int insertRows(String tableType, List<Map<String, String>> rows) throws Exception {
-        if (rows.isEmpty()) return 0;
+    /** 批量插入数据，返回 [成功数, 跳过数] */
+    private int[] insertRows(String tableType, List<Map<String, String>> rows) throws Exception {
+        if (rows.isEmpty()) return new int[]{0, 0};
 
         Connection conn = DatabaseConnector.getConnection();
         conn.setAutoCommit(false);
 
         String table = prefix + tableType + "_custom";
-        int count = 0;
+        int count = 0, skipped = 0;
 
         switch (tableType) {
             case "movies":
                 PreparedStatement ps = conn.prepareStatement(
-                    "INSERT INTO movies_custom (movie_id, title, title_full, genres_raw) VALUES (?,?,?,?)");
+                    "INSERT INTO " + table + " (movie_id, title, title_full, genres_raw) VALUES (?,?,?,?)");
                 for (Map<String, String> row : rows) {
                     try {
                         ps.setInt(1, parseInt(row.get("movie_id")));
@@ -214,7 +262,7 @@ public class CsvImporter {
                         ps.setString(3, row.getOrDefault("title_full", row.getOrDefault("title", "")));
                         ps.setString(4, row.getOrDefault("genres_raw", row.getOrDefault("genres", "")));
                         ps.addBatch(); count++;
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) { skipped++; }
                     if (count % 1000 == 0) ps.executeBatch();
                 }
                 ps.executeBatch();
@@ -222,16 +270,19 @@ public class CsvImporter {
 
             case "ratings":
                 ps = conn.prepareStatement(
-                    "INSERT INTO ratings_custom (user_id, movie_id, rating, ts) VALUES (?,?,?,?)");
+                    "INSERT INTO " + table + " (user_id, movie_id, rating, ts) VALUES (?,?,?,?)");
                 for (Map<String, String> row : rows) {
                     try {
+                        double rating = parseDouble(row.get("rating"));
+                        // Skip obviously invalid ratings (negative or >10)
+                        if (rating < 0 || rating > 10) { skipped++; continue; }
                         ps.setInt(1, parseInt(row.get("user_id")));
                         ps.setInt(2, parseInt(row.get("movie_id")));
-                        ps.setDouble(3, parseDouble(row.get("rating")));
+                        ps.setDouble(3, rating);
                         ps.setLong(4, parseLong(row.getOrDefault("timestamp",
                             row.getOrDefault("ts", "0"))));
                         ps.addBatch(); count++;
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) { skipped++; }
                     if (count % 1000 == 0) ps.executeBatch();
                 }
                 ps.executeBatch();
@@ -239,7 +290,7 @@ public class CsvImporter {
 
             case "users":
                 ps = conn.prepareStatement(
-                    "INSERT INTO users_custom (user_id, gender, age, age_group, occupation_id, occupation, zipcode) VALUES (?,?,?,?,?,?,?)");
+                    "INSERT INTO " + table + " (user_id, gender, age, age_group, occupation_id, occupation, zipcode) VALUES (?,?,?,?,?,?,?)");
                 for (Map<String, String> row : rows) {
                     try {
                         ps.setInt(1, parseInt(row.get("user_id")));
@@ -250,7 +301,7 @@ public class CsvImporter {
                         ps.setString(6, row.getOrDefault("occupation", ""));
                         ps.setString(7, row.getOrDefault("zipcode", ""));
                         ps.addBatch(); count++;
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) { skipped++; }
                     if (count % 1000 == 0) ps.executeBatch();
                 }
                 ps.executeBatch();
@@ -259,7 +310,7 @@ public class CsvImporter {
 
         conn.commit();
         conn.setAutoCommit(true);
-        return count;
+        return new int[]{count, skipped};
     }
 
     private int parseInt(Object v) { try { return Integer.parseInt(String.valueOf(v)); } catch(Exception e) { return 0; } }

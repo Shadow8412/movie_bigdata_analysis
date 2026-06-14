@@ -85,15 +85,30 @@ public class UploadServlet extends HttpServlet {
             importer.setDsId(dsId);
             Map<String, Integer> counts = importer.importFiles(uploadedFiles);
 
-            // 5. SCP + Spark 后台分析
-            String sparkMsg = triggerSparkAnalysis(dsId, uploadedFiles);
-
-            // 6. 更新数据集统计
-            updateDatasetStats(dsId);
-
             int movies = counts.getOrDefault("movies", 0);
             int ratings = counts.getOrDefault("ratings", 0);
             int users = counts.getOrDefault("users", 0);
+            int total = movies + ratings + users;
+
+            // If no data was imported at all, skip Spark and return error
+            if (total == 0) {
+                // Clean up temp files and dataset record
+                for (File f : uploadedFiles) f.delete();
+                deleteDatasetQuietly(dsId);
+                result.put("success", false);
+                result.put("message", "❌ 数据导入失败：文件中未检测到有效的 CSV 数据。请确认：\n" +
+                    "1. 文件不是空文件\n" +
+                    "2. 第一行为列名（如 user_id,movie_id,rating）\n" +
+                    "3. 数据列之间用逗号、Tab 或 :: 分隔");
+                resp.getWriter().write(gson.toJson(result));
+                return;
+            }
+
+            // 5. SCP + Spark 后台分析（仅在SQL导入成功时触发）
+            triggerSparkAnalysis(dsId, uploadedFiles);
+
+            // 6. 更新数据集统计
+            updateDatasetStats(dsId);
 
             result.put("success", true);
             result.put("datasetId", dsId);
@@ -172,6 +187,17 @@ public class UploadServlet extends HttpServlet {
                 ps.setInt(4, dsId);
                 ps.executeUpdate();
             }
+        } catch (Exception ignored) {}
+    }
+
+    /** Clean up failed dataset registration */
+    private void deleteDatasetQuietly(int dsId) {
+        try {
+            Connection conn = DatabaseConnector.getConnection();
+            java.sql.Statement stmt = conn.createStatement();
+            stmt.executeUpdate("DELETE FROM datasets WHERE id=" + dsId);
+            stmt.close();
+            conn.close();
         } catch (Exception ignored) {}
     }
 

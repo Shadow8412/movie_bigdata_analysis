@@ -1,0 +1,4 @@
+This is not a CSV file.
+It contains random text content.
+{"user": 1, "rating": 5}
+Lorem ipsum dolor sit amet.

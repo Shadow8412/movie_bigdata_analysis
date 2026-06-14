@@ -101,7 +101,21 @@ ps("Spark Custom Dataset Analysis")
 movies, ratings, users = load_all()
 
 if ratings is None:
-    print("ERROR: No ratings file found!"); spark.stop(); sys.exit(1)
+    print("ERROR: No valid ratings file found!"); spark.stop(); sys.exit(1)
+
+# ---- Data Cleansing: filter invalid ratings ----
+total_before = ratings.count()
+ratings = ratings.filter(
+    col("rating").cast("double").isNotNull() &
+    (col("rating").cast("double") >= 0) &
+    (col("rating").cast("double") <= 10)
+)
+total_after = ratings.count()
+if total_before != total_after:
+    print("  Filtered invalid ratings: " + str(total_before) + " -> " + str(total_after) +
+          " (" + str(total_before - total_after) + " rows removed)")
+if total_after == 0:
+    print("ERROR: All ratings invalid after cleansing!"); spark.stop(); sys.exit(1)
 
 ratings.cache()
 if movies: movies.cache()

@@ -45,8 +45,8 @@
             font-size: 15px; color: #1a237e; margin-bottom: 12px;
             padding-bottom: 8px; border-bottom: 2px solid #e8e8e8;
         }
-        .chart-box { width: 100%; height: 380px; }
-        .chart-box.tall { height: 450px; }
+        .chart-box { width: 100%; height: 420px; }
+        .chart-box.tall { height: 550px; }
         .footer { text-align: center; color: #999; font-size: 12px; padding: 16px; margin-top: 16px; }
         .loading { text-align: center; color: #999; padding: 40px; }
     </style>
@@ -208,16 +208,19 @@ fetchData('rating_dist', function(data) {
     chart.setOption({
         tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
         xAxis: { type: 'category', data: scores, name: '评分' },
-        yAxis: { type: 'value', name: '数量(万)',
+        yAxis: { type: 'value', name: '数量',
             axisLabel: { formatter: v => v >= 10000 ? (v/10000).toFixed(0) + 'w' : v } },
         series: [{
             type: 'bar', data: counts,
             itemStyle: { color: new echarts.graphic.LinearGradient(0,0,0,1,[
                 {offset:0, color:'#667eea'}, {offset:1, color:'#764ba2'}
             ])},
-            markLine: { data: [{ type: 'average', name: '平均值' }] }
+            markLine: { 
+                data: [{ type: 'average', name: '平均值' }],
+                label: { position: 'insideEndTop', fontSize: 11 }
+            }
         }],
-        grid: { left: 50, right: 20, top: 20, bottom: 30 }
+        grid: { left: 65, right: 35, top: 35, bottom: 35, containLabel: true }
     });
 });
 
@@ -229,6 +232,8 @@ fetchData('top_movies', function(data) {
     var movies = data.map(d => d.movie_name).reverse();
     var ratings = data.map(d => parseFloat(d.avg_rating)).reverse();
     var counts = data.map(d => d.rating_count).reverse();
+    var minR = Math.max(0, (Math.min.apply(null, ratings) - 0.5).toFixed(1));
+    var maxR = (Math.max.apply(null, ratings) + 0.3).toFixed(1);
     chart.setOption({
         tooltip: {
             trigger: 'axis',
@@ -237,9 +242,13 @@ fetchData('top_movies', function(data) {
                 return movies[i] + '<br/>平均分: ' + ratings[i] + '<br/>评分人数: ' + counts[i];
             }
         },
-        xAxis: { type: 'value', name: '平均评分', min: 3.5, max: 4.5 },
+        xAxis: { type: 'value', name: '平均评分', nameLocation: 'center', nameGap: 25,
+            min: minR, max: maxR },
         yAxis: { type: 'category', data: movies,
-            axisLabel: { fontSize: 10, width: 140, overflow: 'truncate' } },
+            axisLabel: { fontSize: 11,
+                formatter: function(v) { return v.length > 25 ? v.substring(0,23) + '...' : v; }
+            }
+        },
         series: [{
             type: 'bar', data: ratings,
             itemStyle: { color: new echarts.graphic.LinearGradient(0,0,1,0,[
@@ -247,7 +256,7 @@ fetchData('top_movies', function(data) {
             ])},
             label: { show: true, position: 'right', fontSize: 10, formatter: '{c}' }
         }],
-        grid: { left: 5, right: 45, top: 10, bottom: 20 }
+        grid: { left: 5, right: 60, top: 5, bottom: 30, containLabel: true }
     });
 });
 
@@ -302,7 +311,7 @@ fetchData('gender_comp', function(data) {
                 data: data.map(d => parseFloat(d.high_rate_pct)),
                 itemStyle: { color: '#fac858' } }
         ],
-        grid: { left: 60, right: 60, top: 40, bottom: 30 }
+        grid: { left: 60, right: 60, top: 40, bottom: 30, containLabel: true }
     });
 });
 
@@ -330,7 +339,7 @@ fetchData('age_stats', function(data) {
                 lineStyle: { width: 3, color: '#f97316' },
                 itemStyle: { color: '#f97316' } }
         ],
-        grid: { left: 60, right: 60, top: 40, bottom: 30 }
+        grid: { left: 60, right: 60, top: 40, bottom: 30, containLabel: true }
     });
 });
 
@@ -360,7 +369,7 @@ fetchData('occupation_stats', function(data) {
                 data: top.map(d => parseFloat(d.rating_per_user)),
                 itemStyle: { color: '#ec4899' }, symbol: 'diamond' }
         ],
-        grid: { left: 60, right: 60, top: 40, bottom: 80 }
+        grid: { left: 60, right: 60, top: 40, bottom: 80, containLabel: true }
     });
 });
 
@@ -383,7 +392,8 @@ fetchData('active_users', function(data) {
             }
         },
         xAxis: { type: 'category', data: labels, axisLabel: { rotate: 60, fontSize: 10 } },
-        yAxis: { type: 'value', name: '评分数量' },
+        yAxis: { type: 'value', name: '评分数量', nameLocation: 'center', nameGap: 45,
+            axisLabel: { formatter: v => v >= 1000 ? (v/1000).toFixed(0) + 'k' : v } },
         series: [{
             type: 'bar', data: counts,
             itemStyle: {
@@ -394,8 +404,8 @@ fetchData('active_users', function(data) {
                 }
             }
         }],
-        dataZoom: [{ type: 'slider', start: 0, end: 100 }],
-        grid: { left: 60, right: 20, top: 20, bottom: 100 }
+        dataZoom: [{ type: 'slider', start: 0, end: 100, height: 20, bottom: 10 }],
+        grid: { left: 80, right: 30, top: 20, bottom: 120, containLabel: true }
     });
 });
 

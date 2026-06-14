@@ -1,10 +1,24 @@
 # -*- coding: utf-8 -*-
 #=============================================================================
-#  Spark 通用电影数据分析 — Custom Dataset
+#  Spark 通用电影数据分析 — 支持任意格式电影评分数据集
 #=============================================================================
-#  输入: ~/movie_bigdata_analysis/data/custom/*.csv
-#  输出: MySQL movie_analysis (7张标准表)
-#  特性: 自动检测列名/分隔符/文件类型，适配任意电影数据集
+#  输入: ~/movie_bigdata_analysis/data/custom/ds{N}/*.csv
+#  输出: MySQL movie_analysis (7张标准表, ds{N}_ 前缀)
+#  用法: spark-submit spark_custom_analysis.py <dataset_id>
+#
+#  核心特性:
+#    1. 自动检测分隔符 (, :: \t)
+#    2. 自动映射列名 (user/userId→user_id, movie/movieId→movie_id, score→rating)
+#    3. 自动分类文件 (movies/ratings/users)
+#    4. 坏数据过滤 (非数值评分/超出范围/负值 → 自动跳过)
+#    5. 缺失数据兼容 (无movies→跳过Top Movies/Genre步骤)
+#    6. 完成时自动更新 datasets 表计数
+#
+#  数据流:
+#    上传页 → UploadServlet(SCP) → VM custom/ds{N}/ → 本脚本 → MySQL ds{N}_* 表
+#                                          ↓
+#                                    Spark DataFrame API
+#                                    (groupBy/agg/join/jdbc.write)
 #=============================================================================
 
 from pyspark.sql import SparkSession

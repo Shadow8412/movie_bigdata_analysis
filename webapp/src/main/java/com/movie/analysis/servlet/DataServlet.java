@@ -10,24 +10,33 @@ import javax.servlet.http.HttpServletResponse;
 import com.movie.analysis.dao.DatabaseConnector;
 
 /**
- * 数据 RESTful API Servlet — 后端核心控制器
- * 负责成员: E (数据可视化)
+ * 数据 RESTful API Servlet — 仪表板后端核心控制器
  * =================================================================
- * 功能: 提供 JSON 格式的数据接口，供前端 ECharts 通过 AJAX fetch 获取分析数据。
- * 架构: 前端 index.jsp → fetch(/api/data?type=xxx) → DataServlet → MySQL → JSON → ECharts
+ * 架构: 前端 index.jsp → fetch(/api/data?type=xxx&ds=N) → DataServlet → MySQL → JSON → ECharts
  *
- * 全部 8 个 API 端点:
- *   GET /api/data?type=summary           → 仪表板汇总 (电影/评分/用户总数、均分)
- *   GET /api/data?type=rating_dist       → 评分1-5分布 (柱状图)
- *   GET /api/data?type=top_movies        → 热门电影TOP20 (水平条形图)
- *   GET /api/data?type=genre_stats       → 电影类别统计 (饼图)
- *   GET /api/data?type=active_users      → 活跃用户TOP20 (条形图+缩放)
- *   GET /api/data?type=gender_comp       → 男女评分对比 (组合图)
- *   GET /api/data?type=age_stats         → 年龄段分析 (组合图)
- *   GET /api/data?type=occupation_stats  → 职业分析 (组合图)
+ * 全部 13 个 API 端点:
+ *   数据查询 (8):
+ *     GET /api/data?type=summary           → 仪表板汇总 (电影/评分/用户总数/均分)
+ *     GET /api/data?type=rating_dist       → 评分1-5分布 (柱状图)
+ *     GET /api/data?type=top_movies        → 热门电影TOP20 (水平条形图)
+ *     GET /api/data?type=genre_stats       → 电影类别统计 (玫瑰饼图)
+ *     GET /api/data?type=active_users      → 活跃用户TOP20 (彩色条形图+dataZoom)
+ *     GET /api/data?type=gender_comp       → 男女评分对比 (双柱+双线组合图)
+ *     GET /api/data?type=age_stats         → 年龄段分析 (6组年龄段双Y轴)
+ *     GET /api/data?type=occupation_stats  → 职业分析 (柱+折线, x轴旋转45度)
  *
- * 数据流: MySQL (movie_analysis) ← Hive 分析 / Spark 分析
- * 安全: 设置 Access-Control-Allow-Origin:* 允许跨域 (开发用)
+ *   数据集管理 (3):
+ *     GET /api/data?type=datasets          → 所有数据集列表 (用于下拉框+管理页)
+ *     GET /api/data?type=dataset_status&ds=N → Spark完成状态 (ready/analyzing)
+ *     GET /api/data?type=delete_dataset&ds=N → 删除数据集 (DROP表+清理VM文件)
+ *
+ * 多数据集切换:
+ *   ?ds=0 或 ?ds=1 或 无参数 → 默认MovieLens (空前缀)
+ *   ?ds=N (N>1)              → ds{N}_ 前缀的自定义数据集
+ *
+ * 数据流: MySQL (movie_analysis) ← Spark 分析 / Hive 分析 / CsvImporter SQL导入
+ * 安全: Access-Control-Allow-Origin:* (开发阶段允许跨域)
+ * =================================================================
  */
 public class DataServlet extends HttpServlet {
 

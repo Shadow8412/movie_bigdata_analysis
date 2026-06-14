@@ -6,13 +6,23 @@ import java.sql.PreparedStatement;
 import java.util.*;
 
 /**
- * CSV 导入器 — 自动识别电影数据集格式
+ * CSV 导入器 — 自动识别+容错+清洗电影数据集
  * =================================================================
- * 功能:
- *   1. 自动检测分隔符 (, :: \t)
- *   2. 自动识别列名 (movie_id/rating/user_id 等)
- *   3. 按类目 (movies/ratings/users) 分表导入 MySQL
- *   4. 支持 MovieLens 格式 (::) 和通用 CSV (,) 格式
+ * 三级验证体系:
+ *   第1级 (文件级): looksLikeDataFile() → 检查第1行是否含分隔符+可识别列名
+ *   第2级 (行级):   isHeaderRow()       → 跳过重复表头行
+ *   第3级 (值级):   parseDouble()        → 跳过非数值/超范围评分 (0-10)
+ *
+ * 自动格式检测:
+ *   - 分隔符: 优先 :: → \t → ,  (首行检测)
+ *   - 列名:   movie/id/movieid→movie_id, user/userid→user_id, score/rate→rating
+ *   - 表类型: 根据列名组合自动分为 movies / ratings / users
+ *
+ * 表命名:
+ *   - 默认数据集: movies_custom, ratings_custom, users_custom (无前缀)
+ *   - 自定义数据集: ds{N}_movies_custom, ds{N}_ratings_custom ... (ds{N}_ 前缀)
+ *
+ * 容错统计: 返回 [成功数, 跳过数] 供上层报告
  * =================================================================
  */
 public class CsvImporter {

@@ -7,9 +7,21 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 /**
- * MySQL 数据库连接器
- * 负责成员: E (数据可视化)
- * 从 MySQL movie_analysis 数据库读取 Hive 分析结果
+ * MySQL 数据库连接器 — 线程安全的轻量级 JDBC 封装
+ * =================================================================
+ * 设计原则:
+ *   1. 每次调用 getConnection() 创建新连接，避免多线程共享单例连接导致并发崩溃
+ *   2. queryToJson() 方法自动关闭连接（finally 块），防止连接泄漏
+ *   3. 连接 URL 指向 VMware NAT 虚拟机 (192.168.11.130:3306)
+ *
+ * 数据源:
+ *   - 默认 MovieLens 1M 数据 → 无表前缀 (dashboard_summary, rating_distribution ...)
+ *   - 自定义数据集 → ds{N}_ 表前缀 (ds3_dashboard_summary ...)
+ *
+ * 并发安全:
+ *   修复前: static Connection 单例 → 8 个并发 AJAX 请求互相覆盖 → 全部返回 error
+ *   修复后: 每次新建连接+用完即关 → 各请求独立，互不干扰
+ * =================================================================
  */
 public class DatabaseConnector {
 

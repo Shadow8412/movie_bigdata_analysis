@@ -56,7 +56,7 @@
 <div class="header">
     <div>
         <h1>电影评分大数据分析系统</h1>
-        <div class="info">基于 Hadoop + Hive + Sqoop + ECharts | 数据集: MovieLens 1M</div>
+        <div class="info">基于 Hadoop + Hive + Spark + MySQL + ECharts | 数据集: <span id="headerDs">MovieLens 1M</span></div>
     </div>
     <div class="info">大数据系统及应用课程设计</div>
     <div class="nav">
@@ -125,7 +125,7 @@
 </div>
 
 <div class="footer">
-    <p>电影评分大数据分析系统 | MovieLens 1M | Hadoop + Hive + Sqoop + ECharts</p>
+    <p>电影评分大数据分析系统 | Hadoop + Hive + Spark + MySQL + ECharts</p>
     <p>湖南工业大学 计算机学院 大数据系统及应用课程设计</p>
 </div>
 
@@ -148,7 +148,15 @@ fetch('/movie-analysis/api/data?type=datasets')
             sel.innerHTML += '<option value="' + d.id + '" style="color:#333;"' +
                 (d.id == currentDs ? ' selected' : '') + '>' +
                 d.name + ' (' + d.rating_count + ' ratings)</option>';
+            // Update header with current dataset name
+            if (d.id == currentDs) {
+                document.getElementById('headerDs').textContent = d.name;
+            }
         });
+        // Fallback: if currentDs not found, use first
+        if (currentDs == 0 || currentDs == 1) {
+            document.getElementById('headerDs').textContent = data[0] ? data[0].name : 'MovieLens 1M';
+        }
     });
 
 function switchDataset(dsId) {

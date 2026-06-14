@@ -98,8 +98,8 @@ public class UploadServlet extends HttpServlet {
             result.put("success", true);
             result.put("datasetId", dsId);
             result.put("message", String.format(
-                "数据集 [%s] (ID=%d) | SQL: %d电影/%d评分/%d用户 | %s",
-                datasetName, dsId, movies, ratings, users, sparkMsg));
+                "数据集 [%s] (ID=%d) — SQL 导入: %d 电影, %d 评分, %d 用户",
+                datasetName, dsId, movies, ratings, users));
             result.put("stats", null);  // stats now in per-dataset tables
 
         } catch (Exception e) {
@@ -193,9 +193,6 @@ public class UploadServlet extends HttpServlet {
                     " --jars /usr/local/spark/jars/mysql-connector-java-5.1.40/mysql-connector-java-5.1.40-bin.jar" +
                     " ~/movie_bigdata_analysis/scripts/spark_custom_analysis.py " + dsId +
                     " > /tmp/spark_custom_" + dsId + ".log 2>&1 &");
-                // Wait a moment then update stats (Spark runs async)
-                Thread.sleep(5000);
-                updateDatasetStats(dsId);
             } catch (Exception e) {
                 System.err.println("[Spark] " + e.getMessage());
             }

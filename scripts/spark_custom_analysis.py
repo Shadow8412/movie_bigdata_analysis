@@ -203,4 +203,17 @@ summary = spark.createDataFrame([(tmv,tr,tu,av)],["total_movies","total_ratings"
 summary.show(); to_mysql(summary, "dashboard_summary")
 
 print("\n" + "="*60 + "\n  Spark Custom Analysis Complete!\n" + "="*60)
+
+# ---- Update datasets table ----
+import subprocess
+sql = "UPDATE datasets SET movie_count={0}, rating_count={1}, user_count={2} WHERE id={3}".format(tmv, tr, tu, ds_id)
+try:
+    subprocess.call([
+        "mysql", "-u", "movieapp", "-pmovieapp123", "movie_analysis",
+        "-e", sql
+    ])
+    print("  -> datasets table updated (id=" + ds_id + ")")
+except Exception as ex:
+    print("WARN: failed to update datasets: " + str(ex))
+
 spark.stop()

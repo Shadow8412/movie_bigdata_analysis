@@ -17,6 +17,11 @@
         }
         .header h1 { font-size: 22px; font-weight: 600; }
         .header .info { font-size: 13px; opacity: .85; }
+        .header .nav { display: flex; gap: 12px; align-items: center; }
+        .nav-btn { display: inline-block; padding: 10px 20px; border-radius: 22px; color: #fff; text-decoration: none; font-size: 15px; font-weight: 500; transition: all .2s; background: rgba(255,255,255,0.12); }
+        .nav-btn:hover { background: rgba(255,255,255,0.25); transform: translateY(-1px); }
+        .nav-btn.active { background: #ffeb3b; color: #1a237e; font-weight: 700; }
+        .nav-spacer { flex: 1; }
         .container { max-width: 1400px; margin: 20px auto; padding: 0 16px; }
         .stats-row {
             display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
@@ -54,12 +59,13 @@
         <div class="info">基于 Hadoop + Hive + Sqoop + ECharts | 数据集: MovieLens 1M</div>
     </div>
     <div class="info">大数据系统及应用课程设计</div>
-    <div style="display:flex;gap:8px;align-items:center;">
-        <select id="dsSelector" style="padding:4px 8px;border-radius:4px;font-size:13px;" onchange="switchDataset(this.value)">
-            <option value="0">MovieLens 1M (默认)</option>
+    <div class="nav">
+        <select id="dsSelector" style="padding:8px 12px;border-radius:22px;font-size:14px;border:none;background:rgba(255,255,255,0.15);color:#fff;outline:none;cursor:pointer;" onchange="switchDataset(this.value)">
+            <option value="0" style="color:#333;">MovieLens 1M (默认)</option>
         </select>
-        <a href="ai_analysis.jsp" style="color:#ffeb3b;text-decoration:none;font-size:13px;">🤖 AI 评鉴</a>
-        <a href="upload.jsp" style="color:#ffeb3b;text-decoration:none;font-size:13px;">📤 上传</a>
+        <a href="ai_analysis.jsp" class="nav-btn">🤖 AI 评鉴</a>
+        <a href="upload.jsp" class="nav-btn">📤 上传</a>
+        <a href="datasets.jsp" class="nav-btn">🗂️ 管理</a>
     </div>
 </div>
 
@@ -139,7 +145,7 @@ fetch('/movie-analysis/api/data?type=datasets')
         var sel = document.getElementById('dsSelector');
         sel.innerHTML = '';
         data.forEach(function(d) {
-            sel.innerHTML += '<option value="' + d.id + '"' +
+            sel.innerHTML += '<option value="' + d.id + '" style="color:#333;"' +
                 (d.id == currentDs ? ' selected' : '') + '>' +
                 d.name + ' (' + d.rating_count + ' ratings)</option>';
         });
@@ -150,6 +156,12 @@ function switchDataset(dsId) {
 }
 
 // ==================== 通用工具 ====================
+function formatCount(n) {
+    n = parseInt(n);
+    if (n >= 10000) return (n / 10000).toFixed(1) + '万';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+    return n.toLocaleString();
+}
 function fetchData(type, callback) {
     fetch('/movie-analysis/api/data?type=' + type + '&ds=' + currentDs)
         .then(res => res.json())
@@ -170,7 +182,7 @@ fetchData('summary', function(data) {
         document.querySelectorAll('#statsRow .stat-card')[0].querySelector('.value').textContent
             = parseInt(s.total_movies).toLocaleString();
         document.querySelectorAll('#statsRow .stat-card')[1].querySelector('.value').textContent
-            = (s.total_ratings / 10000).toFixed(1) + '万';
+            = formatCount(s.total_ratings);
         document.querySelectorAll('#statsRow .stat-card')[2].querySelector('.value').textContent
             = parseInt(s.total_users);
         document.querySelectorAll('#statsRow .stat-card')[3].querySelector('.value').textContent
@@ -189,7 +201,7 @@ fetchData('rating_dist', function(data) {
         tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
         xAxis: { type: 'category', data: scores, name: '评分' },
         yAxis: { type: 'value', name: '数量(万)',
-            axisLabel: { formatter: v => (v/10000).toFixed(0) + 'w' } },
+            axisLabel: { formatter: v => v >= 10000 ? (v/10000).toFixed(0) + 'w' : v } },
         series: [{
             type: 'bar', data: counts,
             itemStyle: { color: new echarts.graphic.LinearGradient(0,0,0,1,[
@@ -273,7 +285,7 @@ fetchData('gender_comp', function(data) {
         series: [
             { name: '用户数', type: 'bar', data: data.map(d => parseInt(d.user_count)),
                 itemStyle: { color: '#5470c6' } },
-            { name: '评分量(万)', type: 'bar', data: data.map(d => (parseInt(d.rating_count)/10000).toFixed(1)),
+            { name: '评分量', type: 'bar', data: data.map(d => parseInt(d.rating_count)),
                 itemStyle: { color: '#91cc75' } },
             { name: '平均评分', type: 'line', yAxisIndex: 1,
                 data: data.map(d => parseFloat(d.avg_rating)),
@@ -302,7 +314,7 @@ fetchData('age_stats', function(data) {
         series: [
             { name: '用户数', type: 'bar', data: data.map(d => parseInt(d.user_count)),
                 itemStyle: { color: '#3b82f6' }, barGap: '10%' },
-            { name: '评分量(万)', type: 'bar', data: data.map(d => (parseInt(d.rating_count)/10000).toFixed(1)),
+            { name: '评分量', type: 'bar', data: data.map(d => parseInt(d.rating_count)),
                 itemStyle: { color: '#60a5fa' } },
             { name: '平均评分', type: 'line', yAxisIndex: 1,
                 data: data.map(d => parseFloat(d.avg_rating)),

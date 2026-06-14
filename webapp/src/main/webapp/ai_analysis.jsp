@@ -50,13 +50,14 @@
         .navbar .brand .sub {
             font-size: 12px; color: var(--text2); margin-top: 2px;
         }
-        .navbar .nav-links { display: flex; gap: 16px; align-items: center; }
+        .navbar .nav-links { display: flex; gap: 10px; align-items: center; }
         .navbar .nav-links a {
-            color: var(--text2); text-decoration: none; font-size: 13px;
-            padding: 6px 12px; border-radius: 4px; transition: all .2s;
+            color: var(--text); text-decoration: none; font-size: 15px; font-weight: 500;
+            padding: 9px 18px; border-radius: 22px; transition: all .2s;
+            background: rgba(226,176,74,0.08);
         }
-        .navbar .nav-links a:hover { color: var(--accent); background: rgba(226,176,74,0.08); }
-        .navbar .nav-links a.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+        .navbar .nav-links a:hover { color: var(--accent); background: rgba(226,176,74,0.18); transform: translateY(-1px); }
+        .navbar .nav-links a.active { color: #1a1a2e; background: var(--gold-grad); font-weight: 700; }
 
         /* ====== 主体布局 ====== */
         .main-container {
@@ -271,9 +272,10 @@
         </div>
     </div>
     <div class="nav-links">
-        <a href="index.jsp">📊 数据仪表板</a>
-        <a href="ai_analysis.jsp" class="active">🤖 AI 评鉴</a>
-        <a href="upload.jsp">📤 上传数据</a>
+      <a href="index.jsp">📊 仪表板</a>
+      <a href="ai_analysis.jsp" class="active">🤖 AI 评鉴</a>
+      <a href="upload.jsp">📤 上传</a>
+      <a href="datasets.jsp">🗂️ 管理</a>
     </div>
 </nav>
 

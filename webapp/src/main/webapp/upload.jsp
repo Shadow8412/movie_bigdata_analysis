@@ -8,8 +8,12 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f0f2f5; color: #333; }
-        .header { background: linear-gradient(135deg, #1a237e, #3949ab); color: #fff; padding: 16px 32px; }
+        .header { background: linear-gradient(135deg, #1a237e, #3949ab); color: #fff; padding: 16px 32px; display: flex; justify-content: space-between; align-items: center; }
         .header h1 { font-size: 20px; }
+        .header .nav { display: flex; gap: 12px; align-items: center; }
+        .nav-btn { display: inline-block; padding: 10px 20px; border-radius: 22px; color: #fff; text-decoration: none; font-size: 15px; font-weight: 500; transition: all .2s; background: rgba(255,255,255,0.12); }
+        .nav-btn:hover { background: rgba(255,255,255,0.25); transform: translateY(-1px); }
+        .nav-btn.active { background: #ffeb3b; color: #1a237e; font-weight: 700; }
         .header a { color: #fff; text-decoration: none; font-size: 14px; opacity: .85; }
         .container { max-width: 900px; margin: 30px auto; padding: 0 16px; }
         .card { background: #fff; border-radius: 8px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.06); margin-bottom: 20px; }
@@ -37,6 +41,11 @@
         .result { margin-top: 16px; padding: 12px 16px; border-radius: 4px; font-size: 14px; display: none; }
         .result.success { display: block; background: #e8f5e9; color: #2e7d32; }
         .result.error { display: block; background: #ffebee; color: #c62828; }
+        .result.processing { display: flex; align-items: center; gap: 12px; background: #fff3e0; color: #e65100; flex-wrap: wrap; }
+        .spinner { width: 24px; height: 24px; border: 3px solid #ffe0b2; border-top: 3px solid #e65100; border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .progress-bar { width: 100%; height: 4px; background: #ffe0b2; border-radius: 2px; margin-top: 6px; }
+        .progress-fill { height: 100%; background: #e65100; border-radius: 2px; width: 5%; transition: width 0.5s; }
         .stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin: 12px 0; }
         .stat-item { text-align: center; padding: 10px; background: #f5f5f5; border-radius: 4px; }
         .stat-item .num { font-size: 20px; font-weight: bold; color: #1a237e; }
@@ -47,7 +56,12 @@
 <body>
 <div class="header">
     <h1>上传自定义电影数据集</h1>
-    <a href="index.jsp">← 返回仪表板</a>
+    <div class="nav">
+        <a href="index.jsp" class="nav-btn">📊 仪表板</a>
+        <a href="ai_analysis.jsp" class="nav-btn">🤖 AI 评鉴</a>
+        <a href="upload.jsp" class="nav-btn active">📤 上传</a>
+        <a href="datasets.jsp" class="nav-btn">🗂️ 管理</a>
+    </div>
 </div>
 <div class="container">
 
@@ -149,30 +163,78 @@
         formData.append('datasetName', dsName);
         selectedFiles.forEach(function(f) { formData.append('files', f); });
 
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = '上传中...';
         resultDiv.className = 'result';
-        resultDiv.innerHTML = '<span style="color:#666">正在上传并处理数据，请稍候...</span>';
+        resultDiv.innerHTML = '⏳ 正在上传文件...';
         resultDiv.style.display = 'block';
         statsGrid.innerHTML = '';
 
         fetch('/movie-analysis/upload', { method: 'POST', body: formData })
             .then(function(res) { return res.json(); })
             .then(function(data) {
-                resultDiv.className = data.success ? 'result success' : 'result error';
-                resultDiv.innerHTML = data.message;
-                if (data.stats) {
-                    var labels = {'movies':'电影数','ratings':'评分数','users':'用户数','avgRating':'平均评分'};
-                    var html = '';
-                    for (var k in data.stats) {
-                        html += '<div class="stat-item"><div class="num">' + data.stats[k] + '</div><div class="lbl">' + (labels[k]||k) + '</div></div>';
-                    }
-                    statsGrid.innerHTML = html;
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = '开始上传并处理';
+                if (data.success && data.datasetId) {
+                    // Show processing status with spinner
+                    resultDiv.className = 'result processing';
+                    resultDiv.innerHTML = '<div class="spinner"></div>' +
+                        '<div><strong>⏳ Spark 正在分析数据</strong>' +
+                        '<br><small>' + data.message + '</small></div>' +
+                        '<div class="progress-bar"><div class="progress-fill" id="progFill"></div></div>';
+                    // Start polling for Spark completion
+                    pollSparkStatus(data.datasetId, 0, data.message);
+                } else {
+                    resultDiv.className = data.success ? 'result success' : 'result error';
+                    resultDiv.innerHTML = data.message || '上传失败';
                 }
             })
             .catch(function(err) {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = '开始上传并处理';
                 resultDiv.className = 'result error';
                 resultDiv.innerHTML = '上传失败: ' + err.message;
             });
     });
+
+    function pollSparkStatus(dsId, attempts, uploadMsg) {
+        if (attempts > 80) { // Max 4 minutes
+            resultDiv.className = 'result error';
+            resultDiv.innerHTML = '⚠️ <strong>Spark 分析超时</strong><br><small>请稍后在仪表板中查看数据集 ID=' + dsId + '</small>' +
+                ' <a href="index.jsp?ds=' + dsId + '">查看仪表板 →</a>';
+            return;
+        }
+        setTimeout(function() {
+            fetch('/movie-analysis/api/data?type=dataset_status&ds=' + dsId)
+                .then(function(r) { return r.json(); })
+                .then(function(s) {
+                    if (s.status === 'ready') {
+                        // Fetch summary to show counts
+                        fetch('/movie-analysis/api/data?type=summary&ds=' + dsId)
+                            .then(function(r) { return r.json(); })
+                            .then(function(sum) {
+                                var stats = sum && sum.length > 0 ? sum[0] : null;
+                                var statsText = stats ?
+                                    stats.total_movies + ' 电影 / ' + stats.total_ratings + ' 评分 / ' + stats.total_users + ' 用户 / 均分 ' + parseFloat(stats.avg_rating).toFixed(2) :
+                                    '';
+                                resultDiv.className = 'result success';
+                                resultDiv.innerHTML = '<strong>🎉 分析完成！</strong>' +
+                                    (statsText ? '<br><span style="font-size:18px;font-weight:bold;color:#1a237e;">' + statsText + '</span>' : '') +
+                                    '<br><a href="index.jsp?ds=' + dsId + '" style="font-size:14px;">📊 查看仪表板 →</a>';
+                            });
+                    } else {
+                        var dots = '.'.repeat((attempts % 4) + 1);
+                        var pct = Math.min(attempts * 2, 90);
+                        document.getElementById('progFill').style.width = pct + '%';
+                        document.querySelector('#result .spinner + div strong').textContent = '⏳ Spark 正在分析数据' + dots;
+                        pollSparkStatus(dsId, attempts + 1, uploadMsg);
+                    }
+                })
+                .catch(function() {
+                    pollSparkStatus(dsId, attempts + 1, uploadMsg);
+                });
+        }, 3000);
+    }
 </script>
 </body>
 </html>

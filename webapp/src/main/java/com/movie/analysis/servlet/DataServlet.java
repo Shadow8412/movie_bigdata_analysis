@@ -120,13 +120,18 @@ public class DataServlet extends HttpServlet {
                     json = DatabaseConnector.queryToJson(
                         "SELECT COUNT(*) AS cnt FROM ds" + ds + "_dashboard_summary",
                         new String[]{"cnt"});
-                    // If result has cnt>0, Spark is done
                     if (json.contains("\"cnt\":0") || json.contains("\"error\"")) {
                         json = "{\"status\":\"analyzing\"}";
                     } else {
                         json = "{\"status\":\"ready\"}";
                     }
                 }
+                break;
+
+            // Delete a custom dataset (N>1)
+            case "delete_dataset":
+                String delDs = req.getParameter("ds");
+                json = deleteDataset(delDs);
                 break;
 
             default:
@@ -140,5 +145,39 @@ public class DataServlet extends HttpServlet {
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
         doGet(req, resp);
+    }
+
+    /** Delete a custom dataset: drop tables + remove dataset record + clean VM files */
+    private String deleteDataset(String dsId) {
+        if (dsId == null || dsId.equals("0") || dsId.equals("1")) {
+            return "{\"error\":\"不能删除默认数据集\"}";
+        }
+        try {
+            java.sql.Connection conn = DatabaseConnector.getConnection();
+            java.sql.Statement stmt = conn.createStatement();
+            // Drop all ds{N}_* tables
+            String prefix = "ds" + dsId + "_";
+            java.sql.ResultSet rs = stmt.executeQuery(
+                "SELECT TABLE_NAME FROM information_schema.TABLES" +
+                " WHERE TABLE_SCHEMA='movie_analysis' AND TABLE_NAME LIKE '" + prefix + "%'");
+            java.util.List<String> tables = new java.util.ArrayList<>();
+            while (rs.next()) tables.add(rs.getString(1));
+            for (String t : tables) stmt.executeUpdate("DROP TABLE IF EXISTS `" + t + "`");
+            // Remove from datasets table
+            stmt.executeUpdate("DELETE FROM datasets WHERE id=" + dsId);
+            rs.close();
+            stmt.close();
+            conn.close();
+            // Clean VM data directory
+            try {
+                Runtime.getRuntime().exec(new String[]{
+                    "ssh", "my-hadoop",
+                    "rm -rf ~/movie_bigdata_analysis/data/custom/ds" + dsId
+                });
+            } catch (Exception ignored) {}
+            return "{\"success\":true,\"message\":\"数据集 ID=" + dsId + " 已删除 (共 " + tables.size() + " 张表)\"}";
+        } catch (Exception e) {
+            return "{\"error\":\"" + e.getMessage().replace("\"", "'") + "\"}";
+        }
     }
 }

@@ -91,9 +91,6 @@ public class UploadServlet extends HttpServlet {
             // 6. 更新数据集统计
             updateDatasetStats(dsId);
 
-            // 7. 清理临时文件
-            for (File f : uploadedFiles) f.delete();
-
             int movies = counts.getOrDefault("movies", 0);
             int ratings = counts.getOrDefault("ratings", 0);
             int users = counts.getOrDefault("users", 0);
@@ -140,17 +137,33 @@ public class UploadServlet extends HttpServlet {
         return 1;
     }
 
-    /** Update dataset row counts */
+    /** Update dataset row counts from dashboard_summary (Spark) or ratings_custom (CsvImporter fallback) */
     private void updateDatasetStats(int dsId) throws Exception {
         Connection conn = DatabaseConnector.getConnection();
         java.sql.Statement stmt = conn.createStatement();
         String p = "ds" + dsId + "_";
         try {
+            // Prefer Spark's dashboard_summary
             java.sql.ResultSet rs = stmt.executeQuery(
-                "SELECT (SELECT COUNT(DISTINCT movie_id) FROM " + p + "ratings)," +
-                "(SELECT COUNT(*) FROM " + p + "ratings)," +
-                "(SELECT COUNT(DISTINCT user_id) FROM " + p + "ratings)");
-            if (rs.next()) {
+                "SELECT total_movies, total_ratings, total_users FROM " + p + "dashboard_summary LIMIT 1");
+            if (rs.next() && rs.getLong(2) > 0) {
+                java.sql.PreparedStatement ps = conn.prepareStatement(
+                    "UPDATE datasets SET movie_count=?, rating_count=?, user_count=? WHERE id=?");
+                ps.setLong(1, rs.getLong(1));
+                ps.setLong(2, rs.getLong(2));
+                ps.setLong(3, rs.getLong(3));
+                ps.setInt(4, dsId);
+                ps.executeUpdate();
+                return;
+            }
+        } catch (Exception ignored) {}
+        try {
+            // Fallback: CsvImporter tables
+            java.sql.ResultSet rs = stmt.executeQuery(
+                "SELECT (SELECT COUNT(DISTINCT movie_id) FROM " + p + "ratings_custom)," +
+                "(SELECT COUNT(*) FROM " + p + "ratings_custom)," +
+                "(SELECT COUNT(DISTINCT user_id) FROM " + p + "ratings_custom)");
+            if (rs.next() && rs.getLong(2) > 0) {
                 java.sql.PreparedStatement ps = conn.prepareStatement(
                     "UPDATE datasets SET movie_count=?, rating_count=?, user_count=? WHERE id=?");
                 ps.setLong(1, rs.getLong(1));
@@ -162,19 +175,27 @@ public class UploadServlet extends HttpServlet {
         } catch (Exception ignored) {}
     }
 
-    /** SCP + Spark, now with dataset ID for custom table prefixes */
+    /** SCP + Spark, with dataset ID for custom table prefixes */
     private String triggerSparkAnalysis(int dsId, List<File> files) {
         new Thread(() -> {
             try {
-                execNoWait("ssh my-hadoop 'mkdir -p ~/movie_bigdata_analysis/data/custom'");
+                // Per-dataset subdirectory to isolate data
+                String dsDir = "~/movie_bigdata_analysis/data/custom/ds" + dsId;
+                execNoWait("ssh", "my-hadoop", "rm -rf " + dsDir + " && mkdir -p " + dsDir);
                 for (File f : files) {
-                    execNoWait("scp " + f.getAbsolutePath()
-                        + " my-hadoop:~/movie_bigdata_analysis/data/custom/");
+                    execNoWait("scp", f.getAbsolutePath(), "my-hadoop:" + dsDir + "/");
                 }
-                execNoWait("ssh my-hadoop 'nohup /usr/local/spark/bin/spark-submit"
-                    + " --jars /usr/local/spark/jars/mysql-connector-java-5.1.40/mysql-connector-java-5.1.40-bin.jar"
-                    + " ~/movie_bigdata_analysis/scripts/spark_custom_analysis.py " + dsId
-                    + " > /tmp/spark_custom.log 2>&1 &'");
+                // Clean up temp files AFTER SCP completes
+                for (File f : files) f.delete();
+
+                execNoWait("ssh", "my-hadoop",
+                    "nohup /usr/local/spark/bin/spark-submit" +
+                    " --jars /usr/local/spark/jars/mysql-connector-java-5.1.40/mysql-connector-java-5.1.40-bin.jar" +
+                    " ~/movie_bigdata_analysis/scripts/spark_custom_analysis.py " + dsId +
+                    " > /tmp/spark_custom_" + dsId + ".log 2>&1 &");
+                // Wait a moment then update stats (Spark runs async)
+                Thread.sleep(5000);
+                updateDatasetStats(dsId);
             } catch (Exception e) {
                 System.err.println("[Spark] " + e.getMessage());
             }
@@ -182,9 +203,9 @@ public class UploadServlet extends HttpServlet {
         return "Spark analyzing...";
     }
 
-    /** 执行命令并等待完成，同时消费输出流防止阻塞 */
-    private void execNoWait(String cmd) throws Exception {
-        Process p = Runtime.getRuntime().exec(cmd);
+    /** 使用ProcessBuilder执行命令，避免Windows cmd.exe的引号问题 */
+    private void execNoWait(String... cmd) throws Exception {
+        Process p = new ProcessBuilder(cmd).redirectErrorStream(false).start();
         new Thread(() -> { try {
             byte[] buf = new byte[4096]; int n;
             while ((n = p.getInputStream().read(buf)) != -1) {}

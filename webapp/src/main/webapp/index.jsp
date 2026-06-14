@@ -58,6 +58,7 @@
         <select id="dsSelector" style="padding:4px 8px;border-radius:4px;font-size:13px;" onchange="switchDataset(this.value)">
             <option value="0">MovieLens 1M (默认)</option>
         </select>
+        <a href="ai_analysis.jsp" style="color:#ffeb3b;text-decoration:none;font-size:13px;">🤖 AI 评鉴</a>
         <a href="upload.jsp" style="color:#ffeb3b;text-decoration:none;font-size:13px;">📤 上传</a>
     </div>
 </div>

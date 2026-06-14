@@ -21,6 +21,16 @@
         <url-pattern>/api/data</url-pattern>
     </servlet-mapping>
 
+    <!-- AI 电影评鉴师 Servlet -->
+    <servlet>
+        <servlet-name>AiAnalysisServlet</servlet-name>
+        <servlet-class>com.movie.analysis.servlet.AiAnalysisServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>AiAnalysisServlet</servlet-name>
+        <url-pattern>/api/ai</url-pattern>
+    </servlet-mapping>
+
     <!-- Upload Servlet -->
     <servlet>
         <servlet-name>UploadServlet</servlet-name>

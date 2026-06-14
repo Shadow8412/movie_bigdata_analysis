@@ -20,7 +20,7 @@ print("Dataset ID: " + ds_id + " | Table prefix: " + (prefix or "(default)"))
 spark = SparkSession.builder.appName("MovieCustom").getOrCreate()
 spark.sparkContext.setLogLevel("WARN")
 
-DATA_DIR = os.path.expanduser("~/movie_bigdata_analysis/data/custom")
+DATA_DIR = os.path.expanduser("~/movie_bigdata_analysis/data/custom/ds" + ds_id)
 
 def ps(title): print("\n" + "="*60 + "\n  " + title + "\n" + "="*60)
 
@@ -45,8 +45,10 @@ def auto_map(df):
     cols_low = {c.lower():c for c in df.columns}
     if 'movie_id' in cols_low: alias_map[cols_low['movie_id']] = 'movie_id'
     elif 'movieid' in cols_low: alias_map[cols_low['movieid']] = 'movie_id'
+    elif 'movie' in cols_low: alias_map[cols_low['movie']] = 'movie_id'
     if 'user_id' in cols_low: alias_map[cols_low['user_id']] = 'user_id'
     elif 'userid' in cols_low: alias_map[cols_low['userid']] = 'user_id'
+    elif 'user' in cols_low: alias_map[cols_low['user']] = 'user_id'
     if 'rating' in cols_low: alias_map[cols_low['rating']] = 'rating'
     elif 'score' in cols_low: alias_map[cols_low['score']] = 'rating'
     if 'title' in cols_low: alias_map[cols_low['title']] = 'title'
@@ -55,6 +57,8 @@ def auto_map(df):
     elif 'genres_raw' in cols_low: alias_map[cols_low['genres_raw']] = 'genres'
     if 'gender' in cols_low: alias_map[cols_low['gender']] = 'gender'
     if 'age' in cols_low: alias_map[cols_low['age']] = 'age'
+    if 'time' in cols_low: alias_map[cols_low['time']] = 'time'
+    elif 'timestamp' in cols_low: alias_map[cols_low['timestamp']] = 'time'
     sel = []
     for v in df.columns:
         if v in alias_map:

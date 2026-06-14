@@ -47,9 +47,9 @@ public class DataServlet extends HttpServlet {
             return;
         }
 
-        // Dataset switching: ?ds=N  (0=default MovieLens, N=uploaded dataset ID)
+        // Dataset switching: ?ds=N  (null/0/1=default MovieLens, N>1=custom dataset)
         String dsId = req.getParameter("ds");
-        boolean custom = dsId != null && !"0".equals(dsId);
+        boolean custom = dsId != null && !"0".equals(dsId) && !"1".equals(dsId);
         String prefix = custom ? ("ds" + dsId + "_") : "";
 
         String json = "";
@@ -109,6 +109,24 @@ public class DataServlet extends HttpServlet {
                 json = DatabaseConnector.queryToJson(
                     "SELECT id, name, movie_count, rating_count, user_count FROM datasets ORDER BY id",
                     new String[]{"id", "name", "movie_count", "rating_count", "user_count"});
+                break;
+
+            // Check if Spark has completed for a dataset (has dashboard_summary table)
+            case "dataset_status":
+                String ds = req.getParameter("ds");
+                if (ds == null || ds.equals("0") || ds.equals("1")) {
+                    json = "{\"status\":\"ready\"}";
+                } else {
+                    json = DatabaseConnector.queryToJson(
+                        "SELECT COUNT(*) AS cnt FROM ds" + ds + "_dashboard_summary",
+                        new String[]{"cnt"});
+                    // If result has cnt>0, Spark is done
+                    if (json.contains("\"cnt\":0") || json.contains("\"error\"")) {
+                        json = "{\"status\":\"analyzing\"}";
+                    } else {
+                        json = "{\"status\":\"ready\"}";
+                    }
+                }
                 break;
 
             default:

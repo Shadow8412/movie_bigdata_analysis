@@ -13,11 +13,9 @@ import java.sql.Statement;
  */
 public class DatabaseConnector {
 
-    private static final String URL      = "jdbc:mysql://172.27.17.128:3306/movie_analysis?useSSL=false&amp;useUnicode=true&amp;characterEncoding=utf8mb4&amp;serverTimezone=Asia/Shanghai";
+    private static final String URL      = "jdbc:mysql://192.168.11.130:3306/movie_analysis?useSSL=false&amp;useUnicode=true&amp;characterEncoding=utf8mb4&amp;serverTimezone=Asia/Shanghai";
     private static final String USER     = "movieapp";
     private static final String PASSWORD = "movieapp123";
-
-    private static Connection conn = null;
 
     static {
         try {
@@ -27,11 +25,9 @@ public class DatabaseConnector {
         }
     }
 
+    // Each call creates a new connection — safe for concurrent requests
     public static Connection getConnection() throws SQLException {
-        if (conn == null || conn.isClosed()) {
-            conn = DriverManager.getConnection(URL, USER, PASSWORD);
-        }
-        return conn;
+        return DriverManager.getConnection(URL, USER, PASSWORD);
     }
 
     /** Check if user has uploaded custom data */
@@ -62,23 +58,14 @@ public class DatabaseConnector {
         return baseName;
     }
 
-    public static void closeConnection() {
-        try {
-            if (conn != null && !conn.isClosed()) {
-                conn.close();
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-
     /**
      * 执行查询并返回 JSON 格式结果
      */
     public static String queryToJson(String sql, String[] columns) {
         StringBuilder json = new StringBuilder("[");
+        Connection c = null;
         try {
-            Connection c = getConnection();
+            c = getConnection();
             Statement stmt = c.createStatement();
             ResultSet rs = stmt.executeQuery(sql);
 
@@ -105,6 +92,8 @@ public class DatabaseConnector {
             stmt.close();
         } catch (SQLException e) {
             return "{\"error\":\"" + escapeJson(e.getMessage()) + "\"}";
+        } finally {
+            try { if (c != null) c.close(); } catch (SQLException ignored) {}
         }
         json.append("]");
         return json.toString();

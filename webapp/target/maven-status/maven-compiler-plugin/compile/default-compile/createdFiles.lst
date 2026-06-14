@@ -2,3 +2,4 @@ com\movie\analysis\servlet\UploadServlet.class
 com\movie\analysis\servlet\DataServlet.class
 com\movie\analysis\dao\CsvImporter.class
 com\movie\analysis\dao\DatabaseConnector.class
+com\movie\analysis\servlet\AiAnalysisServlet.class
